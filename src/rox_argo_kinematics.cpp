@@ -49,6 +49,7 @@
 #include <sensor_msgs/msg/joy.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 #include "tf2_ros/buffer.h"
+#include <neo_msgs2/msg/kinematics_state.hpp>
 
 
 using std::placeholders::_1;
@@ -139,7 +140,7 @@ public:
       std::bind(&ArgoKinematicsNode::cmd_vel_callback, this, _1));
     m_sub_joint_state =
       this->create_subscription<sensor_msgs::msg::JointState>(
-      "joint_states", 1,
+      "drives/joint_states", 1,
       std::bind(&ArgoKinematicsNode::joint_state_callback, this, _1));
 
     m_kinematics = std::make_shared<OmniKinematics>(m_num_wheels);
@@ -217,6 +218,14 @@ private:
     m_last_cmd_vel.linear.x = twist->linear.x;
     m_last_cmd_vel.linear.y = twist->linear.y;
     m_last_cmd_vel.angular.z = twist->angular.z;
+
+    m_kinematics_state.is_vel_cmd = false;
+    if (twist->linear.x != 0 ||
+      twist->linear.y != 0 ||
+      twist->angular.z != 0) {
+      m_kinematics_state.is_vel_cmd = true;
+    } 
+      
   }
 
   void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr joint_state)
@@ -348,6 +357,16 @@ private:
 
       m_tf_odom_broadcaster->sendTransform(odom_tf);
     }
+
+    // setting the kinematic state
+    kinematics_state.is_moving = false;
+    if(m_curr_odom_twist.linear.x != 0 ||
+      m_curr_odom_twist.linear.y != 0 ||
+      m_curr_odom_twist.angular.z != 0) 
+    {
+      m_kinematics_state.is_moving = true;
+    }
+    m_pub_kinematics_state->publish(kinematics_state);
   }
 
 private:
@@ -356,6 +375,7 @@ private:
   rclcpp::TimerBase::SharedPtr timer_;
   rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_pub_odometry;
   rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr m_pub_joint_trajectory;
+  rclcpp::Publisher<neo_msgs2::msg::KinematicsState>::SharedPtr m_pub_kinematics_state;
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr m_sub_cmd_vel;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr m_sub_joint_state;
@@ -384,6 +404,7 @@ private:
   double m_curr_odom_y = std::numeric_limits<double>::min();
   double m_curr_odom_yaw = std::numeric_limits<double>::min();
   geometry_msgs::msg::Twist m_curr_odom_twist;
+  neo_msgs2::msg::KinematicsState m_kinematics_state;
 };
 
 int main(int argc, char ** argv)
