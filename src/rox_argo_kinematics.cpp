@@ -220,15 +220,7 @@ private:
     m_last_cmd_time = rclcpp::Clock().now();
     m_last_cmd_vel.linear.x = twist->linear.x;
     m_last_cmd_vel.linear.y = twist->linear.y;
-    m_last_cmd_vel.angular.z = twist->angular.z;
-
-    m_kinematics_state.is_vel_cmd = false;
-    if (twist->linear.x != 0 ||
-      twist->linear.y != 0 ||
-      twist->angular.z != 0) {
-      m_kinematics_state.is_vel_cmd = true;
-    } 
-      
+    m_last_cmd_vel.angular.z = twist->angular.z;      
   }
 
   void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr joint_state)
@@ -362,14 +354,22 @@ private:
     }
 
     // setting the kinematic state
-    kinematics_state.is_moving = false;
+    m_kinematics_state.is_moving = false;
+
+    m_kinematics_state.is_vel_cmd = false;
+    if (m_last_cmd_vel.linear.x != 0 ||
+      m_last_cmd_vel.linear.y != 0 ||
+      m_last_cmd_vel.angular.z != 0) {
+      m_kinematics_state.is_vel_cmd = true;
+    }
+
     if(m_curr_odom_twist.linear.x != 0 ||
       m_curr_odom_twist.linear.y != 0 ||
       m_curr_odom_twist.angular.z != 0) 
     {
       m_kinematics_state.is_moving = true;
     }
-    m_pub_kinematics_state->publish(kinematics_state);
+    m_pub_kinematics_state->publish(m_kinematics_state);
   }
 
 private:
