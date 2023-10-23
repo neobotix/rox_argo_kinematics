@@ -132,7 +132,7 @@ public:
 
     m_pub_odometry = this->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
     m_pub_joint_trajectory = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
-      "drives/joint_trajectory", 1);
+      "joint_trajectory", 1);
     m_pub_kinematics_state = this->create_publisher<neo_msgs2::msg::KinematicsState>(
       "kinematics_state", 1);
 
@@ -143,7 +143,7 @@ public:
       std::bind(&ArgoKinematicsNode::cmd_vel_callback, this, _1));
     m_sub_joint_state =
       this->create_subscription<sensor_msgs::msg::JointState>(
-      "drives/joint_states", 1,
+      "joint_states", 1,
       std::bind(&ArgoKinematicsNode::joint_state_callback, this, _1));
 
     m_kinematics = std::make_shared<OmniKinematics>(m_num_wheels);
