@@ -133,6 +133,9 @@ public:
     m_pub_odometry = this->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
     m_pub_joint_trajectory = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
       "drives/joint_trajectory", 1);
+    m_pub_kinematics_state = this->create_publisher<neo_msgs2::msg::KinematicsState>(
+      "kinematics_state", 1);
+
     m_tf_odom_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
     m_sub_cmd_vel =
       this->create_subscription<geometry_msgs::msg::Twist>(
