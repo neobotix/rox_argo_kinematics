@@ -32,165 +32,84 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#include <tf2_ros/transform_broadcaster.h>
-#include <tf2/LinearMath/Quaternion.h>
+#include <ros/ros.h>
+#include <tf/transform_broadcaster.h>
+#include <geometry_msgs/Twist.h>
+#include <geometry_msgs/TransformStamped.h>
+#include <nav_msgs/Odometry.h>
+#include <sensor_msgs/JointState.h>
+#include <trajectory_msgs/JointTrajectory.h>
+#include <trajectory_msgs/JointTrajectoryPoint.h>
+#include <neo_msgs/KinematicsState.h>
+#include <angles/angles.h>
+#include <std_msgs/Header.h>
 #include <mutex>
 #include <string>
 
 #include "../include/rox_argo_kinematics/OmniKinematics.h"
 #include "../include/rox_argo_kinematics/VelocitySolver.h"
 
-#include "rclcpp/rclcpp.hpp"
-#include <nav_msgs/msg/odometry.hpp>
-#include <geometry_msgs/msg/twist.hpp>
-#include <geometry_msgs/msg/transform_stamped.hpp>
-#include <sensor_msgs/msg/joint_state.hpp>
-#include <trajectory_msgs/msg/joint_trajectory.hpp>
-#include <sensor_msgs/msg/joy.hpp>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include "tf2_ros/buffer.h"
-#include <neo_msgs2/msg/kinematics_state.hpp>
-
-
-using std::placeholders::_1;
-using std::placeholders::_2;
-
-class ArgoKinematicsNode : public rclcpp::Node
-{
+class ArgoKinematicsNode {
 public:
-  ArgoKinematicsNode()
-  : Node("rox_argo_kinematics")
-  {
-    // Declaring parameters
-    this->declare_parameter<double>("control_rate", 50.0);
-    this->declare_parameter<bool>("broadcast_tf", true);
-    this->declare_parameter<int>("num_wheels", 4);
-    this->declare_parameter<double>("wheel_radius", 0.0);
-    this->declare_parameter<double>("cmd_timeout", 0.1);
-    this->declare_parameter<double>("wheel_lever_arm", 0.0);
-    this->declare_parameter<double>("zero_vel_threshold", 0.001);
-    this->declare_parameter<double>("small_vel_threshold", 0.0);
-    this->declare_parameter<double>("steer_hysteresis", 30.0);
-    this->declare_parameter<double>("steer_hysteresis_dynamic", 5.0);
-    this->declare_parameter<bool>("reset_odom", false);
-
-    if (!this->get_parameter("num_wheels", m_num_wheels)) {
-      throw std::logic_error("missing num_wheels param");
-    }
-
-    if (this->get_parameter("wheel_radius", m_wheel_radius) == 0.0) {
-      throw std::logic_error("missing wheel_radius param");
-    }
-
-    if (this->get_parameter("wheel_lever_arm", m_wheel_lever_arm) == 0.0) {
-      throw std::logic_error("missing wheel_lever_arm param");
-    }
-    this->get_parameter_or("broadcast_tf", m_broadcast_tf, true);
-    this->get_parameter_or("cmd_timeout", m_cmd_timeout, 0.1);
-    this->get_parameter_or("control_rate", m_control_rate, 50.0);
+  ArgoKinematicsNode(ros::NodeHandle& nh, ros::NodeHandle& pnh) {
+    // Load parameters
+    pnh.param("control_rate", m_control_rate, 50.0);
+    pnh.param("broadcast_tf", m_broadcast_tf, true);
+    pnh.param("num_wheels", m_num_wheels, 4);
+    pnh.param("wheel_radius", m_wheel_radius, 0.0);
+    pnh.param("cmd_timeout", m_cmd_timeout, 0.1);
+    pnh.param("wheel_lever_arm", m_wheel_lever_arm, 0.0);
+    pnh.param("zero_vel_threshold", m_zero_vel_threshold, 0.001);
+    pnh.param("small_vel_threshold", m_small_vel_threshold, 0.0);
+    pnh.param("steer_hysteresis", m_steer_hysteresis, 30.0);
+    pnh.param("steer_hysteresis_dynamic", m_steer_hysteresis_dynamic, 5.0);
 
     if (m_num_wheels < 2) {
       throw std::logic_error("invalid num_wheels param");
     }
     m_wheels.resize(m_num_wheels);
-
     for (int i = 0; i < m_num_wheels; ++i) {
       m_wheels[i].lever_arm = m_wheel_lever_arm;
-      this->declare_parameter<std::string>( "wheel" + std::to_string(i) + ".drive_joint_name", "random");
-      this->declare_parameter<std::string>( "wheel" + std::to_string(i) + ".steer_joint_name", "random");
-      this->declare_parameter<double>("wheel" + std::to_string(i) + ".center_pos_x", 1.0);
-      this->declare_parameter<double>("wheel" + std::to_string(i) + ".center_pos_y", 1.0);
-
-      if (!this->get_parameter(
-          "wheel" + std::to_string(i) + ".drive_joint_name",
-          m_wheels[i].drive_joint_name))
-      {
-        throw std::logic_error("joint_name param missing for drive motor" + std::to_string(i));
-      }
-      if (!this->get_parameter(
-          "wheel" + std::to_string(i) + ".steer_joint_name",
-          m_wheels[i].steer_joint_name))
-      {
-        throw std::logic_error("joint_name param missing for steering motor" + std::to_string(i));
-      }
-      if (!this->get_parameter(
-          "wheel" + std::to_string(i) + ".center_pos_x",
-          m_wheels[i].center_pos_x))
-      {
-        throw std::logic_error("center_pos_x param missing for steering motor" + std::to_string(i));
-      }
-      if (!this->get_parameter(
-          "wheel" + std::to_string(i) + ".center_pos_y",
-          m_wheels[i].center_pos_y))
-      {
-        throw std::logic_error("center_pos_y param missing for steering motor" + std::to_string(i));
-      }
-
+      pnh.param<std::string>("wheel" + std::to_string(i) + "/drive_joint_name", m_wheels[i].drive_joint_name, "random");
+      pnh.param<std::string>("wheel" + std::to_string(i) + "/steer_joint_name", m_wheels[i].steer_joint_name, "random");
+      pnh.param("wheel" + std::to_string(i) + "/center_pos_x", m_wheels[i].center_pos_x, 1.0);
+      pnh.param("wheel" + std::to_string(i) + "/center_pos_y", m_wheels[i].center_pos_y, 1.0);
       m_wheels[i].home_angle = M_PI * m_wheels[i].home_angle / 180.;
       m_wheels[i].set_wheel_angle(0);
     }
-
-    m_pub_odometry = this->create_publisher<nav_msgs::msg::Odometry>("odom", 1);
-    m_pub_joint_trajectory = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
-      "drive/joint_trajectory", 1);
-    m_pub_kinematics_state = this->create_publisher<neo_msgs2::msg::KinematicsState>(
-      "kinematics_state", 1);
-
-    m_tf_odom_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    m_sub_cmd_vel =
-      this->create_subscription<geometry_msgs::msg::Twist>(
-      "cmd_vel", 1,
-      std::bind(&ArgoKinematicsNode::cmd_vel_callback, this, _1));
-    m_sub_joint_state =
-      this->create_subscription<sensor_msgs::msg::JointState>(
-      "drive/joint_states", 1,
-      std::bind(&ArgoKinematicsNode::joint_state_callback, this, _1));
-
     m_kinematics = std::make_shared<OmniKinematics>(m_num_wheels);
     m_velocity_solver = std::make_shared<VelocitySolver>(m_num_wheels);
-
-    this->get_parameter_or("zero_vel_threshold", m_kinematics->zero_vel_threshold, 0.005);
-    this->get_parameter_or("small_vel_threshold", m_kinematics->small_vel_threshold, 0.03);
-    this->get_parameter_or("steer_hysteresis", m_kinematics->steer_hysteresis, 30.0);
-    this->get_parameter_or("steer_hysteresis_dynamic", m_kinematics->steer_hysteresis_dynamic, 5.0);
-
-    m_kinematics->steer_hysteresis = M_PI * m_kinematics->steer_hysteresis / 180;
-    m_kinematics->steer_hysteresis_dynamic = M_PI * m_kinematics->steer_hysteresis_dynamic / 180;
+    m_kinematics->zero_vel_threshold = m_zero_vel_threshold;
+    m_kinematics->small_vel_threshold = m_small_vel_threshold;
+    m_kinematics->steer_hysteresis = M_PI * m_steer_hysteresis / 180;
+    m_kinematics->steer_hysteresis_dynamic = M_PI * m_steer_hysteresis_dynamic / 180;
     m_kinematics->initialize(m_wheels);
+    m_pub_odometry = nh.advertise<nav_msgs::Odometry>("odom", 1);
+    m_pub_joint_trajectory = nh.advertise<trajectory_msgs::JointTrajectory>("drive/joint_trajectory", 1);
+    m_pub_kinematics_state = nh.advertise<neo_msgs::KinematicsState>("kinematics_state", 1);
+    m_sub_cmd_vel = nh.subscribe("cmd_vel", 1, &ArgoKinematicsNode::cmd_vel_callback, this);
+    m_sub_joint_state = nh.subscribe("drive/joint_states", 1, &ArgoKinematicsNode::joint_state_callback, this);
   }
 
-  void control_step()
-  {
+  void control_step() {
     std::lock_guard<std::mutex> lock(m_node_mutex);
-
-    auto now = rclcpp::Clock().now();
-
-    // check for input timeout
-    if ((now - m_last_cmd_time).seconds() > m_cmd_timeout) {
-      if (!is_cmd_timeout && !m_last_cmd_time.seconds() == 0 &&
+    ros::Time now = ros::Time::now();
+    if ((now - m_last_cmd_time).toSec() > m_cmd_timeout) {
+      if (!is_cmd_timeout && m_last_cmd_time.toSec() != 0 &&
         (m_last_cmd_vel.linear.x != 0 || m_last_cmd_vel.linear.y != 0 ||
-        m_last_cmd_vel.angular.z != 0))
-      {
-        RCLCPP_WARN(this->get_logger(), "cmd_vel input timeout! Stopping now.");
+        m_last_cmd_vel.angular.z != 0)) {
+        ROS_WARN("cmd_vel input timeout! Stopping now.");
       }
-      // reset values to zero
-      // m_last_cmd_vel = geometry_msgs::msg::Twist();
       is_cmd_timeout = true;
     } else {
       is_cmd_timeout = false;
     }
-
-    // compute new wheel angles and velocities
     auto cmd_wheels = m_kinematics->compute(
       m_wheels, m_last_cmd_vel.linear.x,
       m_last_cmd_vel.linear.y, m_last_cmd_vel.angular.z);
-
-    trajectory_msgs::msg::JointTrajectory joint_trajectory;
-
+    trajectory_msgs::JointTrajectory joint_trajectory;
     joint_trajectory.header.stamp = now;
-
-    trajectory_msgs::msg::JointTrajectoryPoint point;
-
+    trajectory_msgs::JointTrajectoryPoint point;
     for (const auto & wheel : cmd_wheels) {
       joint_trajectory.joint_names.push_back(wheel.drive_joint_name);
       joint_trajectory.joint_names.push_back(wheel.steer_joint_name);
@@ -205,107 +124,71 @@ public:
       }
     }
     joint_trajectory.points.push_back(point);
-    m_pub_joint_trajectory->publish(joint_trajectory);
+    m_pub_joint_trajectory.publish(joint_trajectory);
   }
 
-  inline double get_control_rate()
-  {
-    return m_control_rate;
-  }
+  double get_control_rate() const { return m_control_rate; }
 
 private:
-  void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr twist)
-  {
+  void cmd_vel_callback(const geometry_msgs::Twist::ConstPtr& twist) {
     std::lock_guard<std::mutex> lock(m_node_mutex);
-    m_last_cmd_time = rclcpp::Clock().now();
+    m_last_cmd_time = ros::Time::now();
     m_last_cmd_vel.linear.x = twist->linear.x;
     m_last_cmd_vel.linear.y = twist->linear.y;
-    m_last_cmd_vel.angular.z = twist->angular.z;      
+    m_last_cmd_vel.angular.z = twist->angular.z;
   }
 
-  void joint_state_callback(const sensor_msgs::msg::JointState::SharedPtr joint_state)
-  {
+  void joint_state_callback(const sensor_msgs::JointState::ConstPtr& joint_state) {
     std::lock_guard<std::mutex> lock(m_node_mutex);
-    geometry_msgs::msg::Quaternion quat_msg1;
+    geometry_msgs::Quaternion quat_msg1;
     const size_t num_joints = joint_state->name.size();
     if (joint_state->position.size() < num_joints) {
-      RCLCPP_ERROR_ONCE(this->get_logger(), "joint_state->position.size() < num_joints");
+      ROS_ERROR_ONCE("joint_state->position.size() < num_joints");
       return;
     }
     if (joint_state->velocity.size() < num_joints) {
-      RCLCPP_ERROR_ONCE(this->get_logger(), "joint_state->velocity.size() < num_joints");
+      ROS_ERROR_ONCE("joint_state->velocity.size() < num_joints");
       return;
     }
-    // update wheels with new data
     for (size_t i = 0; i < num_joints; ++i) {
       for (auto & wheel : m_wheels) {
         if (joint_state->name[i] == wheel.drive_joint_name) {
-          // update wheel velocity
           wheel.wheel_vel = -1 * joint_state->velocity[i] * m_wheel_radius;
         }
         if (joint_state->name[i] == wheel.steer_joint_name) {
-          // update wheel steering angle and wheel position (due to lever arm)
           wheel.set_wheel_angle(joint_state->position[i] + M_PI);
         }
       }
     }
-
-    // compute velocities
     m_velocity_solver->solve(m_wheels);
-
-    nav_msgs::msg::Odometry odometry;
+    nav_msgs::Odometry odometry;
     odometry.header.frame_id = "odom";
-    odometry.header.stamp.sec = joint_state->header.stamp.sec;
-    odometry.header.stamp.nanosec = joint_state->header.stamp.nanosec;
+    odometry.header.stamp = joint_state->header.stamp;
     odometry.child_frame_id = "base_link";
-
-    // integrate odometry (using second order midpoint method)
-    if (m_curr_odom_time.sec != 0.000) {
-      // Convert nanoseconds to seconds add them with the seconds
-      const double dt =
-        (joint_state->header.stamp.sec + (joint_state->header.stamp.nanosec) *
-        (1.0 / 1000000000.0)) -
-        (m_curr_odom_time.sec + (m_curr_odom_time.nanosec) * (1.0 / 1000000000.0) );
-
-      // check for valid delta time
+    if (!m_curr_odom_time.isZero()) {
+      const double dt = (joint_state->header.stamp - m_curr_odom_time).toSec();
       if (dt > 0 && dt < 1) {
-        // compute second order midpoint velocities
-        const double vel_x_mid = 0.5 *
-          (m_velocity_solver->move_vel_x + m_curr_odom_twist.linear.x);
-        const double vel_y_mid = 0.5 *
-          (m_velocity_solver->move_vel_y + m_curr_odom_twist.linear.y);
-        const double yawrate_mid = 0.5 *
-          (m_velocity_solver->move_yawrate + m_curr_odom_twist.angular.z);
-
-        // compute midpoint yaw angle
+        const double vel_x_mid = 0.5 * (m_velocity_solver->move_vel_x + m_curr_odom_twist.linear.x);
+        const double vel_y_mid = 0.5 * (m_velocity_solver->move_vel_y + m_curr_odom_twist.linear.y);
+        const double yawrate_mid = 0.5 * (m_velocity_solver->move_yawrate + m_curr_odom_twist.angular.z);
         const double yaw_mid = m_curr_odom_yaw + 0.5 * yawrate_mid * dt;
-
-        // integrate position using midpoint velocities and yaw angle
         m_curr_odom_x += vel_x_mid * dt * cos(yaw_mid) + vel_y_mid * dt * -sin(yaw_mid);
         m_curr_odom_y += vel_x_mid * dt * sin(yaw_mid) + vel_y_mid * dt * cos(yaw_mid);
-
-        // integrate yaw angle using midpoint yawrate
         m_curr_odom_yaw += yawrate_mid * dt;
       } else {
-        RCLCPP_WARN(this->get_logger(), "invalid joint state delta time");
+        ROS_WARN("invalid joint state delta time");
       }
     }
     m_curr_odom_time = joint_state->header.stamp;
-
-    // assign odometry pose
     odometry.pose.pose.position.x = m_curr_odom_x;
     odometry.pose.pose.position.y = m_curr_odom_y;
     odometry.pose.pose.position.z = 0;
-    tf2::Quaternion q;
+    tf::Quaternion q;
     q.setRPY(0, 0, m_curr_odom_yaw);
-    quat_msg1 = tf2::toMsg(q);
-
-    odometry.pose.pose.orientation.x = quat_msg1.x;
-    odometry.pose.pose.orientation.y = quat_msg1.y;
-    odometry.pose.pose.orientation.z = quat_msg1.z;
-    odometry.pose.pose.orientation.w = quat_msg1.w;
-
-    // assign odometry twist
+    odometry.pose.pose.orientation.x = q.x();
+    odometry.pose.pose.orientation.y = q.y();
+    odometry.pose.pose.orientation.z = q.z();
+    odometry.pose.pose.orientation.w = q.w();
     m_curr_odom_twist.linear.x = m_velocity_solver->move_vel_x;
     m_curr_odom_twist.linear.y = m_velocity_solver->move_vel_y;
     m_curr_odom_twist.linear.z = 0;
@@ -313,68 +196,48 @@ private:
     m_curr_odom_twist.angular.y = 0;
     m_curr_odom_twist.angular.z = m_velocity_solver->move_yawrate;
     odometry.twist.twist = m_curr_odom_twist;
-
-    // assign bogus covariance values
-    odometry.pose.covariance.fill(0.1);
-    odometry.twist.covariance.fill(0.1);
-
-    // publish odometry
-    m_pub_odometry->publish(odometry);
-
-    // broadcast odometry
+    for (int i = 0; i < 36; ++i) {
+      odometry.pose.covariance[i] = 0.1;
+      odometry.twist.covariance[i] = 0.1;
+    }
+    m_pub_odometry.publish(odometry);
     if (m_broadcast_tf) {
-      // compose and publish transform for tf package
-      geometry_msgs::msg::TransformStamped odom_tf;
-      geometry_msgs::msg::Quaternion quat_msg;
-      // compose header
+      geometry_msgs::TransformStamped odom_tf;
       odom_tf.header.stamp = joint_state->header.stamp;
       odom_tf.header.frame_id = "odom";
       odom_tf.child_frame_id = "base_link";
-      // compose data container
       odom_tf.transform.translation.x = m_curr_odom_x;
       odom_tf.transform.translation.y = m_curr_odom_y;
       odom_tf.transform.translation.z = 0;
-      odom_tf.transform.rotation.x = quat_msg1.x;
-      odom_tf.transform.rotation.y = quat_msg1.y;
-      odom_tf.transform.rotation.z = quat_msg1.z;
-      odom_tf.transform.rotation.w = quat_msg1.w;
-      // publish the transform
-
-      m_tf_odom_broadcaster->sendTransform(odom_tf);
+      odom_tf.transform.rotation.x = q.x();
+      odom_tf.transform.rotation.y = q.y();
+      odom_tf.transform.rotation.z = q.z();
+      odom_tf.transform.rotation.w = q.w();
+      m_tf_odom_broadcaster.sendTransform(odom_tf);
     }
-
-    // setting the kinematic state
     m_kinematics_state.is_moving = false;
-
     m_kinematics_state.is_vel_cmd = false;
     if (m_last_cmd_vel.linear.x != 0 ||
       m_last_cmd_vel.linear.y != 0 ||
       m_last_cmd_vel.angular.z != 0) {
       m_kinematics_state.is_vel_cmd = true;
     }
-
     if(m_curr_odom_twist.linear.x != 0 ||
       m_curr_odom_twist.linear.y != 0 ||
       m_curr_odom_twist.angular.z != 0) 
     {
       m_kinematics_state.is_moving = true;
     }
-    m_pub_kinematics_state->publish(m_kinematics_state);
+    m_pub_kinematics_state.publish(m_kinematics_state);
   }
 
-private:
   std::mutex m_node_mutex;
-
-  rclcpp::TimerBase::SharedPtr timer_;
-  rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr m_pub_odometry;
-  rclcpp::Publisher<trajectory_msgs::msg::JointTrajectory>::SharedPtr m_pub_joint_trajectory;
-  rclcpp::Publisher<neo_msgs2::msg::KinematicsState>::SharedPtr m_pub_kinematics_state;
-
-  rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr m_sub_cmd_vel;
-  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr m_sub_joint_state;
-
-  std::shared_ptr<tf2_ros::TransformBroadcaster> m_tf_odom_broadcaster;
-
+  ros::Publisher m_pub_odometry;
+  ros::Publisher m_pub_joint_trajectory;
+  ros::Publisher m_pub_kinematics_state;
+  ros::Subscriber m_sub_cmd_vel;
+  ros::Subscriber m_sub_joint_state;
+  tf::TransformBroadcaster m_tf_odom_broadcaster;
   bool m_broadcast_tf = false;
   int m_num_wheels = 0;
   int m_steer_reset_button = -1;
@@ -382,42 +245,36 @@ private:
   double m_wheel_lever_arm = 0;
   double m_cmd_timeout = 0;
   double m_control_rate = 0;
-
+  double m_zero_vel_threshold = 0.005;
+  double m_small_vel_threshold = 0.03;
+  double m_steer_hysteresis = 30.0;
+  double m_steer_hysteresis_dynamic = 5.0;
   std::vector<OmniWheel> m_wheels;
-
   std::shared_ptr<OmniKinematics> m_kinematics;
   std::shared_ptr<VelocitySolver> m_velocity_solver;
-
-  rclcpp::Time m_last_cmd_time;
-  geometry_msgs::msg::Twist m_last_cmd_vel;
+  ros::Time m_last_cmd_time;
+  geometry_msgs::Twist m_last_cmd_vel;
   bool is_cmd_timeout = false;
-
-  std_msgs::msg::Header::_stamp_type m_curr_odom_time;
+  ros::Time m_curr_odom_time;
   double m_curr_odom_x = std::numeric_limits<double>::min();
   double m_curr_odom_y = std::numeric_limits<double>::min();
   double m_curr_odom_yaw = std::numeric_limits<double>::min();
-  geometry_msgs::msg::Twist m_curr_odom_twist;
-  neo_msgs2::msg::KinematicsState m_kinematics_state;
+  geometry_msgs::Twist m_curr_odom_twist;
+  neo_msgs::KinematicsState m_kinematics_state;
 };
 
 int main(int argc, char ** argv)
 {
-  // initialize ROS
-  rclcpp::init(argc, argv);
-  auto nh = std::make_shared<ArgoKinematicsNode>();
-  double control_rate = nh->get_control_rate();   // [1/s]
-  rclcpp::Rate loop_rate(control_rate);
-
-  RCLCPP_INFO_ONCE(nh->get_logger(), "Starting the ROX kinematics node");
-
-  try {
-    while (rclcpp::ok()) {
-      rclcpp::spin_some(nh);
-      nh->control_step();
-      loop_rate.sleep();
-    }
-  } catch (std::exception & ex) {
-    RCLCPP_FATAL_STREAM(nh->get_logger(), "ArgoKinematicsNode: " << ex.what());
+  ros::init(argc, argv, "rox_argo_kinematics");
+  ros::NodeHandle nh;
+  ros::NodeHandle pnh("~");
+  ArgoKinematicsNode node(nh, pnh);
+  ros::Rate loop_rate(node.get_control_rate());
+  ROS_INFO("Starting the ROX kinematics node");
+  while (ros::ok()) {
+    ros::spinOnce();
+    node.control_step();
+    loop_rate.sleep();
   }
   return 0;
 }

@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <!-- upload parameters -->
+    <rosparam command="load" file="$(find rox_argo_kinematics)/launch/rox_argo_kinematics.yaml" />
+
+    <!-- start nodes -->
+    <node pkg="rox_argo_kinematics" type="rox_argo_kinematics_node" name="argo_kinematics_node" output="screen" />
+</launch>

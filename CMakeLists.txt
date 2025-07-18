@@ -1,55 +1,47 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 2.8.3)
 project(rox_argo_kinematics)
-if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
-endif()
-if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic)
-endif()
 
-find_package(ament_cmake REQUIRED)
-find_package(rclcpp REQUIRED)
-find_package(std_msgs REQUIRED)
-find_package(nav_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(trajectory_msgs REQUIRED)
-find_package(neo_srvs2 REQUIRED)
-find_package(neo_msgs2 REQUIRED)
-find_package(neo_common2 REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(angles REQUIRED)
-find_package(tf2_geometry_msgs REQUIRED)
+find_package(catkin REQUIRED COMPONENTS
+  roscpp
+  geometry_msgs
+  sensor_msgs
+  trajectory_msgs
+  neo_msgs
+  neo_srvs
+  tf
+  tf2_ros
+  nav_msgs
+  angles
+  neo_common
+)
+
+catkin_package(
+  INCLUDE_DIRS include
+)
+
+include_directories(
+  include
+  ${catkin_INCLUDE_DIRS}
+)
 
 add_executable(rox_argo_kinematics_node src/rox_argo_kinematics.cpp)
 
-ament_target_dependencies(rox_argo_kinematics_node
-  rclcpp
-  tf2_ros
-  sensor_msgs
-  geometry_msgs
-  std_msgs
-  neo_msgs2
-  neo_srvs2
-  nav_msgs
-  trajectory_msgs
-  tf2_geometry_msgs
-  neo_common2
-  angles)
-
-ament_export_include_directories(include)
-
-install(DIRECTORY include/
-   DESTINATION include/
+target_link_libraries(rox_argo_kinematics_node
+  ${catkin_LIBRARIES}
 )
 
-install(TARGETS 
-rox_argo_kinematics_node
-DESTINATION lib/${PROJECT_NAME}
-	)
+install(TARGETS rox_argo_kinematics_node
+  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 
-install(DIRECTORY launch
-  	
-  DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY include/
+  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
+)
 
-ament_package()
+install(DIRECTORY launch/
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/launch
+)
+
+install(FILES LICENSE README.md
+  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
+) 
