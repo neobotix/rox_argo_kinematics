@@ -51,7 +51,7 @@
 
 class ArgoKinematicsNode {
 public:
-  ArgoKinematicsNode(ros::NodeHandle& nh) {
+  ArgoKinematicsNode() {
     // Load parameters
     nh.param("control_rate", m_control_rate, 50.0);
     nh.param("broadcast_tf", m_broadcast_tf, true);
@@ -261,13 +261,14 @@ private:
   double m_curr_odom_yaw = std::numeric_limits<double>::min();
   geometry_msgs::Twist m_curr_odom_twist;
   neo_msgs::KinematicsState m_kinematics_state;
+  ros::NodeHandle nh;
 };
 
 int main(int argc, char ** argv)
 {
   ros::init(argc, argv, "rox_argo_kinematics");
   ros::NodeHandle nh;
-  ArgoKinematicsNode node(nh);
+  ArgoKinematicsNode node;
   ros::Rate loop_rate(node.get_control_rate());
   ROS_INFO("Starting the ROX kinematics node");
   while (ros::ok()) {
