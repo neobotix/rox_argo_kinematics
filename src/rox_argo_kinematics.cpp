@@ -51,18 +51,18 @@
 
 class ArgoKinematicsNode {
 public:
-  ArgoKinematicsNode(ros::NodeHandle& nh, ros::NodeHandle& pnh) {
+  ArgoKinematicsNode(ros::NodeHandle& nh) {
     // Load parameters
-    pnh.param("control_rate", m_control_rate, 50.0);
-    pnh.param("broadcast_tf", m_broadcast_tf, true);
-    pnh.param("num_wheels", m_num_wheels, 4);
-    pnh.param("wheel_radius", m_wheel_radius, 0.0);
-    pnh.param("cmd_timeout", m_cmd_timeout, 0.1);
-    pnh.param("wheel_lever_arm", m_wheel_lever_arm, 0.0);
-    pnh.param("zero_vel_threshold", m_zero_vel_threshold, 0.001);
-    pnh.param("small_vel_threshold", m_small_vel_threshold, 0.0);
-    pnh.param("steer_hysteresis", m_steer_hysteresis, 30.0);
-    pnh.param("steer_hysteresis_dynamic", m_steer_hysteresis_dynamic, 5.0);
+    nh.param("control_rate", m_control_rate, 50.0);
+    nh.param("broadcast_tf", m_broadcast_tf, true);
+    nh.param("num_wheels", m_num_wheels, 4);
+    nh.param("wheel_radius", m_wheel_radius, 0.0);
+    nh.param("cmd_timeout", m_cmd_timeout, 0.1);
+    nh.param("wheel_lever_arm", m_wheel_lever_arm, 0.0);
+    nh.param("zero_vel_threshold", m_zero_vel_threshold, 0.001);
+    nh.param("small_vel_threshold", m_small_vel_threshold, 0.0);
+    nh.param("steer_hysteresis", m_steer_hysteresis, 30.0);
+    nh.param("steer_hysteresis_dynamic", m_steer_hysteresis_dynamic, 5.0);
 
     if (m_num_wheels < 2) {
       throw std::logic_error("invalid num_wheels param");
@@ -70,10 +70,10 @@ public:
     m_wheels.resize(m_num_wheels);
     for (int i = 0; i < m_num_wheels; ++i) {
       m_wheels[i].lever_arm = m_wheel_lever_arm;
-      pnh.param<std::string>("wheel" + std::to_string(i) + "/drive_joint_name", m_wheels[i].drive_joint_name, "random");
-      pnh.param<std::string>("wheel" + std::to_string(i) + "/steer_joint_name", m_wheels[i].steer_joint_name, "random");
-      pnh.param("wheel" + std::to_string(i) + "/center_pos_x", m_wheels[i].center_pos_x, 1.0);
-      pnh.param("wheel" + std::to_string(i) + "/center_pos_y", m_wheels[i].center_pos_y, 1.0);
+      nh.param<std::string>("wheel" + std::to_string(i) + "/drive_joint_name", m_wheels[i].drive_joint_name, "random");
+      nh.param<std::string>("wheel" + std::to_string(i) + "/steer_joint_name", m_wheels[i].steer_joint_name, "random");
+      nh.param("wheel" + std::to_string(i) + "/center_pos_x", m_wheels[i].center_pos_x, 1.0);
+      nh.param("wheel" + std::to_string(i) + "/center_pos_y", m_wheels[i].center_pos_y, 1.0);
       m_wheels[i].home_angle = M_PI * m_wheels[i].home_angle / 180.;
       m_wheels[i].set_wheel_angle(0);
     }
@@ -267,8 +267,7 @@ int main(int argc, char ** argv)
 {
   ros::init(argc, argv, "rox_argo_kinematics");
   ros::NodeHandle nh;
-  ros::NodeHandle pnh("~");
-  ArgoKinematicsNode node(nh, pnh);
+  ArgoKinematicsNode node(nh);
   ros::Rate loop_rate(node.get_control_rate());
   ROS_INFO("Starting the ROX kinematics node");
   while (ros::ok()) {
