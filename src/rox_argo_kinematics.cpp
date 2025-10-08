@@ -33,7 +33,7 @@
  *********************************************************************/
 
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2/LinearMath/Quaternion.h>
+#include <geometry_msgs/msg/quaternion.hpp>
 #include <mutex>
 #include <string>
 
@@ -353,9 +353,9 @@ private:
       m_kinematics_state.is_vel_cmd = true;
     }
 
-    if(m_curr_odom_twist.linear.x != 0 ||
-      m_curr_odom_twist.linear.y != 0 ||
-      m_curr_odom_twist.angular.z != 0) 
+    if (std::abs(m_curr_odom_twist.linear.x) >= 1e-3 ||
+        std::abs(m_curr_odom_twist.linear.y) >= 1e-3 ||
+        std::abs(m_curr_odom_twist.angular.z) >= 1e-3)
     {
       m_kinematics_state.is_moving = true;
     }
