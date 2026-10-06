@@ -1,7 +1,7 @@
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.20)
 project(rox_argo_kinematics)
 if(NOT CMAKE_CXX_STANDARD)
-  set(CMAKE_CXX_STANDARD 14)
+  set(CMAKE_CXX_STANDARD 17)
 endif()
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -17,25 +17,28 @@ find_package(trajectory_msgs REQUIRED)
 find_package(neo_srvs2 REQUIRED)
 find_package(neo_msgs2 REQUIRED)
 find_package(neo_common2 REQUIRED)
+find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(angles REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
 
 add_executable(rox_argo_kinematics_node src/rox_argo_kinematics.cpp)
 
-ament_target_dependencies(rox_argo_kinematics_node
-  rclcpp
-  tf2_ros
-  sensor_msgs
-  geometry_msgs
-  std_msgs
-  neo_msgs2
-  neo_srvs2
-  nav_msgs
-  trajectory_msgs
-  tf2_geometry_msgs
-  neo_common2
-  angles)
+target_link_libraries(rox_argo_kinematics_node PRIVATE
+  rclcpp::rclcpp
+  tf2::tf2
+  tf2_ros::tf2_ros
+  sensor_msgs::sensor_msgs
+  geometry_msgs::geometry_msgs
+  std_msgs::std_msgs
+  neo_msgs2::neo_msgs2
+  neo_srvs2::neo_srvs2
+  nav_msgs::nav_msgs
+  trajectory_msgs::trajectory_msgs
+  tf2_geometry_msgs::tf2_geometry_msgs
+  neo_common2::neo_common2
+  angles::angles
+)
 
 ament_export_include_directories(include)
 
