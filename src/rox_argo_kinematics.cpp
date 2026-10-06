@@ -32,7 +32,7 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/transform_broadcaster.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 #include <mutex>
 #include <string>
@@ -43,12 +43,13 @@
 #include "rclcpp/rclcpp.hpp"
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/twist.hpp>
+#include <geometry_msgs/msg/twist_stamped.hpp>
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <trajectory_msgs/msg/joint_trajectory.hpp>
 #include <sensor_msgs/msg/joy.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
-#include "tf2_ros/buffer.h"
+#include "tf2_ros/buffer.hpp"
 #include <neo_msgs2/msg/kinematics_state.hpp>
 
 
@@ -136,11 +137,18 @@ public:
     m_pub_kinematics_state = this->create_publisher<neo_msgs2::msg::KinematicsState>(
       "kinematics_state", 1);
 
-    m_tf_odom_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    m_sub_cmd_vel =
+    m_tf_odom_broadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(*this);
+    if (this->declare_parameter<bool>("enable_stamped_cmd_vel", true)) {
+      m_sub_cmd_vel_stamped = this->create_subscription<geometry_msgs::msg::TwistStamped>(
+        "cmd_vel", 1, [this](geometry_msgs::msg::TwistStamped::SharedPtr message) {
+          cmd_vel_callback(std::make_shared<geometry_msgs::msg::Twist>(message->twist));
+        });
+    } else {
+      m_sub_cmd_vel =
       this->create_subscription<geometry_msgs::msg::Twist>(
       "cmd_vel", 1,
       std::bind(&ArgoKinematicsNode::cmd_vel_callback, this, _1));
+    }
     m_sub_joint_state =
       this->create_subscription<sensor_msgs::msg::JointState>(
       "drive/joint_states", 1,
@@ -371,6 +379,7 @@ private:
   rclcpp::Publisher<neo_msgs2::msg::KinematicsState>::SharedPtr m_pub_kinematics_state;
 
   rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr m_sub_cmd_vel;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr m_sub_cmd_vel_stamped;
   rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr m_sub_joint_state;
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> m_tf_odom_broadcaster;
